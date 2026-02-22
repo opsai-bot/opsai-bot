@@ -1,97 +1,97 @@
-# opsai-bot - 개발 가이드
+# opsai-bot - Development Guide
 
-AI 기반 Kubernetes 디버깅 및 자동 조치 도구의 프로젝트 고유 개발 지침
+Project-specific development guidelines for the AI-powered Kubernetes debugging and automated remediation tool.
 
-## 프로젝트 개요
+## Project Overview
 
-**opsai-bot**은 Kubernetes 클러스터의 운영 이슈를 자동으로 진단하고 조치하는 지능형 봇입니다.
+**opsai-bot** is an intelligent bot that automatically diagnoses and remediates operational issues in Kubernetes clusters.
 
-- Webhook 수신: Grafana, AlertManager, PagerDuty 등
-- LLM 기반 분석: Ollama (로컬), Claude, OpenAI
-- 환경별 정책: dev(auto_fix), staging(warn_auto), prod(approval_required)
-- Slack 인터랙션: 스레드 기반 대화형 디버깅
-- 감사 로그: 모든 작업 추적
+- Webhook ingestion: Grafana, AlertManager, PagerDuty, etc.
+- LLM-based analysis: Ollama (local), Claude, OpenAI
+- Environment-specific policies: dev (auto_fix), staging (warn_auto), prod (approval_required)
+- Slack interaction: thread-based conversational debugging
+- Audit logging: full traceability of all actions
 
-## 기술 스택
+## Tech Stack
 
-### 언어 & 런타임
-- **Go 1.25.6** - 메인 언어
-- **CGO 활성화** - SQLite 지원 필요
+### Language & Runtime
+- **Go 1.25.6** - primary language
+- **CGO enabled** - required for SQLite support
 
-### 코어 의존성
-- `k8s.io/client-go v0.35.1` - Kubernetes 조작
+### Core Dependencies
+- `k8s.io/client-go v0.35.1` - Kubernetes operations
 - `slack-go/slack v0.18.0` - Slack Bot (Socket Mode)
-- `mattn/go-sqlite3 v1.14.34` - SQLite 드라이버 (CGO 필요)
-- `gopkg.in/yaml.v3 v3.0.1` - 설정 파일 파싱
+- `mattn/go-sqlite3 v1.14.34` - SQLite driver (requires CGO)
+- `gopkg.in/yaml.v3 v3.0.1` - configuration file parsing
 
-### 아키텍처 패턴
-- **Hexagonal Architecture** (Ports & Adapters 패턴)
-- 도메인과 외부 시스템 완전 분리
-- 테스트 용이한 인터페이스 기반 설계
+### Architecture Pattern
+- **Hexagonal Architecture** (Ports & Adapters pattern)
+- Complete separation between domain and external systems
+- Interface-driven design for testability
 
-### 데이터베이스
-- **SQLite** (기본값, 로컬/개발용)
-  - 경로: `/data/opsai-bot.db`
-  - WAL 모드 활성화
-  - 마이그레이션: `internal/adapter/outbound/persistence/sqlite/migration/`
-- **PostgreSQL** (프로덕션, 선택사항)
-  - 환경변수 기반 설정
-  - 커넥션 풀 지원
+### Database
+- **SQLite** (default, for local/development use)
+  - Path: `/data/opsai-bot.db`
+  - WAL mode enabled
+  - Migrations: `internal/adapter/outbound/persistence/sqlite/migration/`
+- **PostgreSQL** (production, optional)
+  - Environment variable-based configuration
+  - Connection pool support
 
-### LLM 프로바이더
-- **Ollama** (로컬, 기본값)
-  - HTTP API 기반
-  - 모델: `llama3:8b`, `mistral`, `neural-chat` 등
+### LLM Providers
+- **Ollama** (local, default)
+  - HTTP API based
+  - Models: `llama3:8b`, `mistral`, `neural-chat`, etc.
 - **Claude** (Anthropic)
-  - API 키: `CLAUDE_API_KEY`
+  - API key: `CLAUDE_API_KEY`
 - **OpenAI**
-  - API 키: `OPENAI_API_KEY`
+  - API key: `OPENAI_API_KEY`
 
-## 디렉토리 구조
+## Directory Structure
 
 ```
 internal/
-├── domain/                    # 비즈니스 로직 (프레임워크 의존성 없음)
-│   ├── model/                # 도메인 엔티티 (값 객체)
-│   │   ├── alert.go          # 알림 (불변)
-│   │   ├── action.go         # 작업 계획 (불변)
-│   │   ├── analysis.go       # LLM 분석 결과 (불변)
-│   │   ├── audit.go          # 감사 로그 (불변)
-│   │   ├── conversation.go   # Slack 스레드 대화 (불변)
-│   │   └── policy.go         # 정책 설정
+├── domain/                    # Business logic (no framework dependencies)
+│   ├── model/                # Domain entities (value objects)
+│   │   ├── alert.go          # Alert (immutable)
+│   │   ├── action.go         # Action plan (immutable)
+│   │   ├── analysis.go       # LLM analysis result (immutable)
+│   │   ├── audit.go          # Audit log (immutable)
+│   │   ├── conversation.go   # Slack thread conversation (immutable)
+│   │   └── policy.go         # Policy configuration
 │   │
-│   ├── port/                 # 인터페이스 (계약)
-│   │   ├── inbound/          # 들어오는 포트
+│   ├── port/                 # Interfaces (contracts)
+│   │   ├── inbound/          # Inbound ports
 │   │   │   ├── alert_receiver.go  # AlertReceiverPort
 │   │   │   └── interaction.go     # InteractionPort
-│   │   └── outbound/         # 나가는 포트
+│   │   └── outbound/         # Outbound ports
 │   │       ├── k8s_executor.go    # K8sExecutor
 │   │       ├── llm_provider.go    # LLMProvider
 │   │       ├── notifier.go        # Notifier
-│   │       └── repository.go      # Repository 인터페이스들
+│   │       └── repository.go      # Repository interfaces
 │   │
-│   └── service/              # 비즈니스 로직 (조율, 분석)
-│       ├── orchestrator.go        # 주 조율 엔진
+│   └── service/              # Business logic (orchestration, analysis)
+│       ├── orchestrator.go        # Primary orchestration engine
 │       ├── orchestrator_test.go
-│       ├── analyzer.go            # LLM 분석 로직
+│       ├── analyzer.go            # LLM analysis logic
 │       ├── analyzer_test.go
-│       ├── action_planner.go      # 작업 계획
+│       ├── action_planner.go      # Action planning
 │       ├── action_planner_test.go
-│       ├── policy_evaluator.go    # 정책 평가
+│       ├── policy_evaluator.go    # Policy evaluation
 │       └── policy_evaluator_test.go
 │
-├── adapter/                  # 외부 시스템 통합
-│   ├── inbound/             # 들어오는 어댑터
-│   │   ├── webhook/         # HTTP Webhook 수신
+├── adapter/                  # External system integrations
+│   ├── inbound/             # Inbound adapters
+│   │   ├── webhook/         # HTTP Webhook receiver
 │   │   │   ├── handler.go
 │   │   │   ├── handler_test.go
 │   │   │   ├── server.go
-│   │   │   ├── middleware/  # 인증, 로깅, 속도 제한
+│   │   │   ├── middleware/  # Auth, logging, rate limiting
 │   │   │   │   ├── auth.go
 │   │   │   │   ├── logging.go
 │   │   │   │   ├── ratelimit.go
 │   │   │   │   └── bodyreader.go
-│   │   │   └── parser/      # Webhook 파서
+│   │   │   └── parser/      # Webhook parsers
 │   │   │       ├── registry.go
 │   │   │       ├── grafana.go
 │   │   │       ├── grafana_test.go
@@ -103,41 +103,41 @@ internal/
 │   │   └── slackbot/        # Slack Bot (Socket Mode)
 │   │       ├── bot.go
 │   │       ├── interaction.go
-│   │       └── template/    # Block Kit 템플릿
+│   │       └── template/    # Block Kit templates
 │   │           ├── alert_card.go
 │   │           ├── analysis_card.go
 │   │           ├── approval_card.go
 │   │           └── *_test.go
 │   │
-│   └── outbound/            # 나가는 어댑터
-│       ├── llm/             # LLM 클라이언트
+│   └── outbound/            # Outbound adapters
+│       ├── llm/             # LLM clients
 │       │   ├── ollama/
 │       │   │   ├── client.go
 │       │   │   └── client_test.go
-│       │   ├── claude/      # 스텁
-│       │   ├── openai/      # 스텁
-│       │   └── prompt/      # 프롬프트 빌더
+│       │   ├── claude/      # stub
+│       │   ├── openai/      # stub
+│       │   └── prompt/      # Prompt builder
 │       │       ├── builder.go
 │       │       ├── builder_test.go
 │       │       └── templates/
 │       │           ├── diagnose.tmpl
 │       │           └── conversation.tmpl
 │       │
-│       ├── kubernetes/      # K8s 클라이언트
-│       │   ├── client.go    # 클라이언트 초기화
-│       │   ├── executor.go  # 명령 실행
+│       ├── kubernetes/      # K8s client
+│       │   ├── client.go    # Client initialization
+│       │   ├── executor.go  # Command execution
 │       │   ├── executor_test.go
-│       │   ├── reader.go    # 정보 조회
-│       │   ├── whitelist.go # 화이트리스트
+│       │   ├── reader.go    # Information retrieval
+│       │   ├── whitelist.go # Whitelist
 │       │   └── whitelist_test.go
 │       │
-│       ├── notification/    # 알림
+│       ├── notification/    # Notifications
 │       │   ├── slack/
 │       │   │   ├── notifier.go
 │       │   │   └── notifier_test.go
 │       │   └── webhook/
 │       │
-│       └── persistence/     # 데이터 저장소
+│       └── persistence/     # Data storage
 │           ├── sqlite/
 │           │   ├── store.go
 │           │   ├── migration/
@@ -153,22 +153,22 @@ internal/
 │           │   ├── conversation_repo.go
 │           │   └── policy_repo.go
 │           │
-│           └── postgres/    # PostgreSQL 구현 (스텁)
+│           └── postgres/    # PostgreSQL implementation (stub)
 │
-└── config/                  # 설정 관리
-    ├── config.go           # YAML 로드 & 구조체
+└── config/                  # Configuration management
+    ├── config.go           # YAML loading & structs
     ├── config_test.go
-    └── validate.go         # 검증
+    └── validate.go         # Validation
 
 cmd/
 └── opsai/
-    └── main.go             # 엔트리포인트 & DI
+    └── main.go             # Entrypoint & DI
 
 pkg/
 ├── version/
-│   └── version.go          # 빌드 정보
+│   └── version.go          # Build information
 ├── health/
-│   └── health.go           # 헬스 체크
+│   └── health.go           # Health check
 └── ...
 
 deploy/
@@ -177,63 +177,63 @@ deploy/
 │       ├── Chart.yaml
 │       ├── values.yaml
 │       └── templates/
-│
+
 configs/
-├── config.yaml             # 기본 설정
-└── policies/               # 정책 파일들
+├── config.yaml             # Default configuration
+└── policies/               # Policy files
 
 Makefile, Dockerfile, go.mod, go.sum, README.md
 ```
 
-## 코딩 규칙
+## Coding Rules
 
-### 불변성 (Immutability) - 핵심!
+### Immutability - Critical!
 
-**모든 도메인 모델은 불변입니다. 항상 새 객체를 반환하세요.**
+**All domain models are immutable. Always return a new object.**
 
 ```go
-// WRONG - 뮤테이션
+// WRONG - mutation
 func (a *Alert) SetStatus(status AlertStatus) {
-    a.Status = status        // 절대 금지!
+    a.Status = status        // Never do this!
     a.UpdatedAt = time.Now()
 }
 
-// CORRECT - 불변
+// CORRECT - immutable
 func (a Alert) WithStatus(status AlertStatus) Alert {
     a.Status = status
     a.UpdatedAt = time.Now().UTC()
-    return a                 // 새 객체 반환
+    return a                 // Return new object
 }
 ```
 
-**사용 예:**
+**Usage examples:**
 ```go
-// 상태 업데이트
+// Update status
 alert := alert.WithStatus(model.AlertStatusAnalyzing)
 
-// 스레드 ID 설정
+// Set thread ID
 alert = alert.WithThreadID(threadID)
 
-// 저장소에 업데이트
+// Update in repository
 savedAlert, err := repo.Update(ctx, alert)
 ```
 
-### 값 수신자 (Value Receivers)
+### Value Receivers
 
-모든 도메인 메서드는 값 수신자를 사용합니다:
+All domain methods use value receivers:
 
 ```go
-// 도메인 모델
+// Domain model
 func (a Alert) WithStatus(status AlertStatus) Alert { ... }
 func (a Alert) IsTerminal() bool { ... }
 
-// 어댑터는 포인터 수신자 가능
+// Adapters may use pointer receivers
 func (c *OllamaClient) Analyze(ctx context.Context, prompt string) (string, error) { ... }
 ```
 
-### 에러 처리
+### Error Handling
 
-항상 컨텍스트와 함께 에러를 래핑하세요:
+Always wrap errors with context:
 
 ```go
 // WRONG
@@ -248,34 +248,34 @@ if err := o.repos.Alerts.Create(ctx, alert); err != nil {
 }
 ```
 
-### 인터페이스 분리
+### Interface Segregation
 
-포트는 최소한으로 유지하고, 구현은 외부 어댑터에만:
+Keep ports minimal; implementations belong only in external adapters:
 
 ```go
-// port/outbound/k8s_executor.go - 최소한의 인터페이스
+// port/outbound/k8s_executor.go - minimal interface
 type K8sExecutor interface {
     Exec(ctx context.Context, req ExecRequest) (ExecResult, error)
     Read(ctx context.Context, req ReadRequest) (ReadResult, error)
 }
 
-// adapter/outbound/kubernetes/executor.go - 구현
+// adapter/outbound/kubernetes/executor.go - implementation
 type Executor struct {
     clientset kubernetes.Interface
     whitelist *Whitelist
 }
 
 func (e *Executor) Exec(ctx context.Context, req outbound.ExecRequest) (outbound.ExecResult, error) {
-    // 구현
+    // implementation
 }
 ```
 
-### 테스트
+### Testing
 
-표준 `testing` 패키지만 사용하고, 외부 의존성은 Mock/Fake로 처리:
+Use the standard `testing` package only; handle external dependencies with Mock/Fake:
 
 ```go
-// Unit 테스트
+// Unit test
 func TestOrchestratorHandleAlert(t *testing.T) {
     // Arrange
     mockAnalyzer := &mockAnalyzer{}
@@ -295,81 +295,81 @@ func TestOrchestratorHandleAlert(t *testing.T) {
 }
 ```
 
-### 파일 크기
+### File Size
 
-- 도메인 모델: 100-200줄
-- 서비스: 300-500줄
-- 어댑터: 200-400줄
-- 테스트: 같은 크기 또는 더 큼
+- Domain models: 100-200 lines
+- Services: 300-500 lines
+- Adapters: 200-400 lines
+- Tests: same size or larger
 
-파일이 800줄을 넘으면 분할하세요.
+Split any file that exceeds 800 lines.
 
-### 네이밍
+### Naming
 
-**변수/함수/타입:**
-- `camelCase` (Go 관례)
-- 의미 있는 이름: `err` 대신 `parseErr`, `validationErr`
+**Variables / Functions / Types:**
+- `camelCase` (Go convention)
+- Meaningful names: use `parseErr`, `validationErr` instead of just `err`
 
-**패키지:**
-- 소문자: `webhook`, `sqlite`, `kubernetes`
-- 단수형: `adapter` 아님 `adapters`
+**Packages:**
+- Lowercase: `webhook`, `sqlite`, `kubernetes`
+- Singular: `adapter` not `adapters`
 
-**인터페이스:**
-- 단일 메서드: `Reader`, `Writer`, `Parser`
-- 다중 메서드: 역할 기반 `Repository`, `Executor`
+**Interfaces:**
+- Single method: `Reader`, `Writer`, `Parser`
+- Multiple methods: role-based `Repository`, `Executor`
 
-## 빌드 & 테스트
+## Build & Test
 
-### 빌드
+### Build
 
 ```bash
-# 기본 빌드
+# Default build
 make build
 
-# 또는 직접
+# Or directly
 CGO_ENABLED=1 go build -o bin/opsai-bot ./cmd/opsai/
 
-# 버전 정보 포함
-make build  # Makefile에 LDFLAGS 정의됨
+# With version information
+make build  # LDFLAGS defined in Makefile
 ```
 
-**CGO_ENABLED=1이 필수인 이유:** SQLite 드라이버가 C 라이브러리를 필요로 함
+**Why CGO_ENABLED=1 is required:** The SQLite driver depends on a C library.
 
-### 테스트
+### Test
 
 ```bash
-# 전체 테스트
+# Full test suite
 make test
 
-# 단일 패키지
+# Single package
 go test -v ./internal/domain/service/
 
-# 커버리지
+# Coverage
 make coverage
 
-# 특정 테스트
+# Specific test
 go test -run TestOrchestratorHandleAlert ./internal/domain/service/
 ```
 
-**테스트 규칙:**
-- 모든 `_test.go` 파일은 같은 패키지
-- 외부 의존성은 반드시 Mock/Fake
-- 테스트 헬퍼는 `testdata/` 또는 `fake_*` 구조체로
+**Test rules:**
+- All `_test.go` files belong to the same package
+- External dependencies must always be Mock/Fake
+- Test helpers go in `testdata/` or `fake_*` structs
 
-### 린트
+### Lint
 
 ```bash
 make lint
 
-# 또는
+# Or
 golangci-lint run ./...
 ```
 
-**.golangci.yml 확인:** 프로젝트의 린트 규칙은 이 파일에 정의됨
+**Check `.golangci.yml`:** Project lint rules are defined in this file.
 
-## 주요 인터페이스 가이드
+## Key Interface Guide
 
-### LLMProvider (LLM 추상화)
+### LLMProvider (LLM Abstraction)
 
 ```go
 type LLMProvider interface {
@@ -378,13 +378,13 @@ type LLMProvider interface {
 }
 ```
 
-**새 프로바이더 추가 시:**
-1. `internal/adapter/outbound/llm/{provider}/client.go` 생성
-2. 인터페이스 구현
-3. `cmd/opsai/main.go`에 초기화 로직 추가
-4. `config.yaml`에 설정 섹션 추가
+**When adding a new provider:**
+1. Create `internal/adapter/outbound/llm/{provider}/client.go`
+2. Implement the interface
+3. Add initialization logic to `cmd/opsai/main.go`
+4. Add a configuration section to `config.yaml`
 
-### K8sExecutor (Kubernetes 실행)
+### K8sExecutor (Kubernetes Execution)
 
 ```go
 type K8sExecutor interface {
@@ -393,12 +393,12 @@ type K8sExecutor interface {
 }
 ```
 
-**제약사항:**
-- 화이트리스트 명령만 실행
-- 차단된 네임스페이스 검사
-- 타임아웃 적용 (기본 30초)
+**Constraints:**
+- Only whitelisted commands are executed
+- Blocked namespace checks enforced
+- Timeout applied (default 30 seconds)
 
-### Repository 인터페이스들
+### Repository Interfaces
 
 ```go
 type AlertRepository interface {
@@ -410,14 +410,14 @@ type AlertRepository interface {
 }
 ```
 
-**특징:**
-- 컨텍스트 활용 (취소, 타임아웃)
-- 불변 모델 반환
-- 원본 수정 없이 새 객체 반환
+**Characteristics:**
+- Context propagation (cancellation, timeouts)
+- Returns immutable models
+- Returns new objects without modifying the original
 
-## 설정 관리
+## Configuration Management
 
-### 구조
+### Structure
 
 ```go
 // internal/config/config.go
@@ -433,18 +433,18 @@ type Config struct {
 }
 ```
 
-### 환경 변수 오버라이드
+### Environment Variable Override
 
 ```yaml
 # config.yaml
 slack:
-  botToken: "${SLACK_BOT_TOKEN}"      # 환경변수 참조
+  botToken: "${SLACK_BOT_TOKEN}"      # Environment variable reference
   appToken: "${SLACK_APP_TOKEN}"
 ```
 
-로드 시점에 `os.ExpandEnv()` 사용하여 확장됨
+Expanded at load time via `os.ExpandEnv()`.
 
-### 검증
+### Validation
 
 ```go
 // internal/config/validate.go
@@ -452,76 +452,76 @@ func (c *Config) Validate() error {
     if c.LLM.Provider == "" {
         return fmt.Errorf("llm provider must be set")
     }
-    // 더 많은 검증...
+    // more validation...
 }
 ```
 
-## 환경별 정책
+## Environment-Specific Policies
 
-### 정책 모델
+### Policy Model
 
 ```go
 type EnvironmentPolicy struct {
     Mode         string              // auto_fix, warn_auto, approval_required
     MaxAutoRisk  string              // low, medium, high
-    Approvers    []string            // Slack 멘션
-    Namespaces   []string            // 빈 = 모든 네임스페이스
+    Approvers    []string            // Slack mentions
+    Namespaces   []string            // empty = all namespaces
 }
 ```
 
-### 평가 로직
+### Evaluation Logic
 
 ```go
 // PolicyEvaluator.Evaluate()
-// 1. 정책 매칭 (환경 + 네임스페이스)
-// 2. 위험도 검사 (작업 위험도 <= maxAutoRisk)
-// 3. 결정:
-//    - auto_fix: 승인 불필요 → 바로 실행
-//    - warn_auto: 알림 후 자동 실행
-//    - approval_required: Slack 승인 대기
+// 1. Policy matching (environment + namespace)
+// 2. Risk check (action risk <= maxAutoRisk)
+// 3. Decision:
+//    - auto_fix: no approval required → execute immediately
+//    - warn_auto: notify then execute automatically
+//    - approval_required: wait for Slack approval
 ```
 
-## 주요 서비스 플로우
+## Key Service Flows
 
-### AlertReceiverPort 구현 (Orchestrator.HandleAlert)
+### AlertReceiverPort Implementation (Orchestrator.HandleAlert)
 
 ```
-1. Alert 저장
-2. Slack 알림 (스레드 생성)
-3. 상태 → Analyzing
-4. LLM 분석
-5. 작업 계획
-6. 각 작업마다:
-   a. 정책 평가
-   b. 승인 필요 → 요청
-   c. 자동 실행 → 실행
-7. 상태 → Resolved/Acting/Failed
+1. Save alert
+2. Slack notification (create thread)
+3. Status → Analyzing
+4. LLM analysis
+5. Action planning
+6. For each action:
+   a. Policy evaluation
+   b. Approval required → request approval
+   c. Auto-execute → execute
+7. Status → Resolved / Acting / Failed
 ```
 
-### InteractionPort 구현 (Orchestrator.HandleMessage, HandleApproval)
+### InteractionPort Implementation (Orchestrator.HandleMessage, HandleApproval)
 
 ```
 HandleMessage:
-1. 기존 스레드 또는 신규 생성
-2. 사용자 메시지 추가
-3. 대화형 분석 (Analyzer.HandleConversation)
-4. 스레드 저장
-5. 감시 로그 기록
+1. Existing thread or create new
+2. Append user message
+3. Conversational analysis (Analyzer.HandleConversation)
+4. Save thread
+5. Record audit log
 
 HandleApproval:
-1. 작업 조회
-2. 승인 여부 처리
-3. 상태 업데이트
-4. 필요시 실행
-5. 감시 로그 기록
+1. Retrieve action
+2. Process approval decision
+3. Update status
+4. Execute if needed
+5. Record audit log
 ```
 
-## 감시 로그 (Audit)
+## Audit Logging
 
-모든 주요 작업을 기록합니다:
+All significant operations are recorded:
 
 ```go
-// 기록 유형
+// Audit types
 const (
     AuditAlertReceived     AuditType = "alert_received"
     AuditAnalysisStarted             = "analysis_started"
@@ -537,7 +537,7 @@ const (
 )
 ```
 
-**기록 방법:**
+**How to record:**
 ```go
 auditLog := model.NewAuditLog(
     model.AuditActionApproved,
@@ -549,76 +549,76 @@ auditLog := model.NewAuditLog(
 _ = repos.Audits.Create(ctx, auditLog)
 ```
 
-## 개발 워크플로우
+## Development Workflow
 
-### 새 기능 추가 시
+### Adding a New Feature
 
-1. **도메인 모델 작성** (`internal/domain/model/`)
-   - 불변 엔티티
-   - 팩토리 메서드 (`New*`)
-   - 상태 변경 메서드 (`With*`)
+1. **Write domain model** (`internal/domain/model/`)
+   - Immutable entity
+   - Factory method (`New*`)
+   - State transition methods (`With*`)
 
-2. **포트 정의** (`internal/domain/port/`)
-   - 필요한 인터페이스
-   - Request/Response 구조체
+2. **Define ports** (`internal/domain/port/`)
+   - Required interfaces
+   - Request/Response structs
 
-3. **서비스 구현** (`internal/domain/service/`)
-   - 비즈니스 로직
-   - 테스트 작성
+3. **Implement service** (`internal/domain/service/`)
+   - Business logic
+   - Write tests
 
-4. **어댑터 구현** (`internal/adapter/`)
-   - 외부 시스템 통합
-   - 포트 구현체
+4. **Implement adapter** (`internal/adapter/`)
+   - External system integration
+   - Port implementation
 
-5. **설정 추가** (`configs/config.yaml` + `internal/config/config.go`)
-   - 새 설정 필드
-   - 검증 로직
+5. **Add configuration** (`configs/config.yaml` + `internal/config/config.go`)
+   - New configuration fields
+   - Validation logic
 
-6. **테스트 & 린트**
+6. **Test & Lint**
    ```bash
    make test
    make lint
    ```
 
-### 버그 수정 시
+### Fixing a Bug
 
-1. 테스트를 먼저 작성 (실패하는 테스트)
-2. 구현 수정
-3. 테스트 통과 확인
-4. 관련 테스트도 실행
+1. Write the test first (failing test)
+2. Fix the implementation
+3. Confirm the test passes
+4. Run related tests as well
 
-## 메인 로직 시작점
+## Main Logic Entry Point
 
 ```go
 // cmd/opsai/main.go
-// 1. 설정 로드
-// 2. 저장소 초기화 (SQLite)
-// 3. LLM 클라이언트 생성
-// 4. K8s 클라이언트 생성
-// 5. 도메인 서비스 초기화
-// 6. Webhook 서버 시작
-// 7. Slack Bot 시작
-// 8. 신호 대기 (graceful shutdown)
+// 1. Load configuration
+// 2. Initialize repository (SQLite)
+// 3. Create LLM client
+// 4. Create K8s client
+// 5. Initialize domain services
+// 6. Start Webhook server
+// 7. Start Slack Bot
+// 8. Wait for signal (graceful shutdown)
 ```
 
-## 문제 해결
+## Troubleshooting
 
-### SQLite CGO 에러
+### SQLite CGO Error
 ```
 error: cgo: C compiler not available
 ```
-→ `CGO_ENABLED=1`로 빌드하거나, C 컴파일러 설치 (GCC/Clang)
+→ Build with `CGO_ENABLED=1`, or install a C compiler (GCC/Clang).
 
-### LLM 연결 실패
-→ Ollama 서버 실행 확인: `curl http://localhost:11434/api/tags`
+### LLM Connection Failure
+→ Verify the Ollama server is running: `curl http://localhost:11434/api/tags`
 
-### K8s 권한 부족
-→ ServiceAccount 권한 확인: `kubectl auth can-i get pods --as=system:serviceaccount:opsai:opsai-bot`
+### Insufficient K8s Permissions
+→ Check ServiceAccount permissions: `kubectl auth can-i get pods --as=system:serviceaccount:opsai:opsai-bot`
 
-### 화이트리스트 거부
-→ `configs/config.yaml`의 `kubernetes.whitelist` 확인
+### Whitelist Rejection
+→ Check `kubernetes.whitelist` in `configs/config.yaml`
 
-## 참고 자료
+## References
 
 - **Kubernetes client-go**: https://github.com/kubernetes/client-go
 - **Slack Go SDK**: https://github.com/slack-go/slack
@@ -627,4 +627,4 @@ error: cgo: C compiler not available
 
 ---
 
-**마지막 업데이트:** 2026-02-22
+**Last updated:** 2026-02-22
