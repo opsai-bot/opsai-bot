@@ -1,0 +1,13 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: opsai-bot
+    receivers:
+      - uid: opsai-bot-webhook
+        type: webhook
+        settings:
+          url: http://opsai-bot:8080/webhooks/grafana
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: webhook-secret

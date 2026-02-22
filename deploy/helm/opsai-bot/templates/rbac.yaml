@@ -1,0 +1,70 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "opsai-bot.fullname" . }}
+  labels:
+    {{- include "opsai-bot.labels" . | nindent 4 }}
+rules:
+  # Read-only access to core resources
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - events
+      - nodes
+      - namespaces
+    verbs: ["get", "list", "watch"]
+  # Pod logs
+  - apiGroups: [""]
+    resources:
+      - pods/log
+    verbs: ["get"]
+  # Pod exec for whitelisted remediation commands
+  - apiGroups: [""]
+    resources:
+      - pods/exec
+    verbs: ["create"]
+  # Pod delete for pod restart remediation
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs: ["delete"]
+  # Deployment read
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs: ["get", "list", "watch"]
+  # Deployment patch for restart annotation
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs: ["patch"]
+  # Deployment scale update
+  - apiGroups: ["apps"]
+    resources:
+      - deployments/scale
+    verbs: ["update"]
+  # StatefulSet and DaemonSet read-only
+  - apiGroups: ["apps"]
+    resources:
+      - statefulsets
+      - daemonsets
+      - replicasets
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "opsai-bot.fullname" . }}
+  labels:
+    {{- include "opsai-bot.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "opsai-bot.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opsai-bot.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

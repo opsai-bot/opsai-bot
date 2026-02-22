@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "opsai-bot.fullname" . }}
+  labels:
+    {{- include "opsai-bot.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    llm:
+      provider: {{ .Values.config.llm.provider | quote }}
+      ollama:
+        baseURL: {{ .Values.config.llm.ollama.baseURL | quote }}
+        model: {{ .Values.config.llm.ollama.model | quote }}
+
+    database:
+      driver: {{ .Values.config.database.driver | quote }}
+      sqlite:
+        path: {{ .Values.config.database.sqlite.path | quote }}
+
+    slack:
+      enabled: {{ .Values.config.slack.enabled }}
+      defaultChannel: {{ .Values.config.slack.defaultChannel | quote }}
+
+    policy:
+      environments:
+        {{- range $env, $cfg := .Values.config.policy.environments }}
+        {{ $env }}:
+          mode: {{ $cfg.mode | quote }}
+          maxAutoRisk: {{ $cfg.maxAutoRisk | quote }}
+        {{- end }}
+
+    server:
+      port: {{ .Values.service.port }}
+      metricsPort: {{ .Values.service.metricsPort }}

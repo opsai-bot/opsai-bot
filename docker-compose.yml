@@ -1,0 +1,101 @@
+version: "3.8"
+
+services:
+  opsai-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - ./configs:/app/configs:ro
+      - opsai-data:/data
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN:-}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
+      - GRAFANA_WEBHOOK_SECRET=${GRAFANA_WEBHOOK_SECRET:-webhook-secret}
+      - ALERTMANAGER_WEBHOOK_SECRET=${ALERTMANAGER_WEBHOOK_SECRET:-webhook-secret}
+      - GENERIC_WEBHOOK_SECRET=${GENERIC_WEBHOOK_SECRET:-webhook-secret}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - opsai-net
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - opsai-net
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until curl -sf http://ollama:11434/api/tags > /dev/null 2>&1; do
+          echo "Waiting for Ollama..."
+          sleep 2
+        done
+        echo "Pulling llama3:8b model..."
+        curl -X POST http://ollama:11434/api/pull -d '{"name": "llama3:8b"}'
+        echo "Model pull complete."
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - opsai-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - opsai-bot
+    networks:
+      - opsai-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - opsai-net
+
+volumes:
+  opsai-data:
+  ollama-data:
+  grafana-data:
+
+networks:
+  opsai-net:
+    driver: bridge

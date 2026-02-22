@@ -1,0 +1,14 @@
+apiVersion: v2
+name: opsai-bot
+description: AI-powered Kubernetes debugging and remediation tool
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - devops
+  - llm
+  - sre
+  - alerting
+maintainers:
+  - name: jonny

@@ -1,0 +1,56 @@
+replicaCount: 1
+
+image:
+  tag: "staging"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+config:
+  llm:
+    provider: "ollama"
+    ollama:
+      baseURL: "http://ollama.default.svc.cluster.local:11434"
+      model: "llama3:8b"
+  database:
+    driver: "sqlite"
+    sqlite:
+      path: "/data/opsai-bot.db"
+  slack:
+    enabled: true
+    defaultChannel: "#ops-alerts-staging"
+  policy:
+    environments:
+      dev:
+        mode: "auto_fix"
+        maxAutoRisk: "medium"
+      staging:
+        mode: "warn_auto"
+        maxAutoRisk: "medium"
+      prod:
+        mode: "approval_required"
+        maxAutoRisk: "low"
+
+persistence:
+  enabled: true
+  size: 1Gi
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: opsai-bot.staging.internal
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+podAnnotations:
+  environment: "staging"

@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  tag: "dev"
+
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+config:
+  llm:
+    provider: "ollama"
+    ollama:
+      baseURL: "http://ollama.default.svc.cluster.local:11434"
+      model: "llama3:8b"
+  database:
+    driver: "sqlite"
+    sqlite:
+      path: "/data/opsai-bot-dev.db"
+  slack:
+    enabled: true
+    defaultChannel: "#ops-alerts-dev"
+  policy:
+    environments:
+      dev:
+        mode: "auto_fix"
+        maxAutoRisk: "medium"
+      staging:
+        mode: "warn_auto"
+        maxAutoRisk: "medium"
+      prod:
+        mode: "approval_required"
+        maxAutoRisk: "low"
+
+persistence:
+  enabled: true
+  size: 500Mi
+
+podAnnotations:
+  environment: "dev"
