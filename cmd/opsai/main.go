@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/sync/errgroup"
@@ -17,9 +18,11 @@ import (
 	"github.com/jonny/opsai-bot/internal/adapter/inbound/webhook/parser"
 	"github.com/jonny/opsai-bot/internal/adapter/outbound/kubernetes"
 	"github.com/jonny/opsai-bot/internal/adapter/outbound/llm/ollama"
+	"github.com/jonny/opsai-bot/internal/adapter/outbound/notification"
 	slacknotifier "github.com/jonny/opsai-bot/internal/adapter/outbound/notification/slack"
 	"github.com/jonny/opsai-bot/internal/adapter/outbound/persistence/sqlite"
 	"github.com/jonny/opsai-bot/internal/config"
+	"github.com/jonny/opsai-bot/internal/domain/port/outbound"
 	"github.com/jonny/opsai-bot/internal/domain/service"
 	"github.com/jonny/opsai-bot/pkg/health"
 	"github.com/jonny/opsai-bot/pkg/version"
@@ -46,6 +49,10 @@ func main() {
 	logger = buildLogger(cfg.Logging)
 
 	// --- Database ---
+	if mkErr := os.MkdirAll(filepath.Dir(cfg.Database.SQLite.Path), 0o755); mkErr != nil {
+		logger.Warn("could not create database directory", "path", cfg.Database.SQLite.Path, "error", mkErr)
+	}
+
 	store, err := sqlite.NewStore(sqlite.Config{
 		Path:              cfg.Database.SQLite.Path,
 		MaxOpenConns:      cfg.Database.SQLite.MaxOpenConns,
@@ -87,9 +94,12 @@ func main() {
 		logger.Warn("kubernetes clientset unavailable (local dev mode)", "error", err)
 	}
 
-	var k8sExecutor *kubernetes.Executor
+	var k8sExecutor outbound.K8sExecutor
 	if k8sClientset != nil {
 		k8sExecutor = kubernetes.NewExecutor(k8sClientset, whitelist, cfg.Kubernetes.ExecTimeout)
+	} else {
+		logger.Warn("kubernetes unavailable, using noop executor (local dev mode)")
+		k8sExecutor = kubernetes.NewNoopExecutor()
 	}
 
 	// --- LLM ---
@@ -107,18 +117,19 @@ func main() {
 	}
 
 	// --- Notifier ---
-	notifier := slacknotifier.NewNotifier(slacknotifier.Config{
-		BotToken:       cfg.Slack.BotToken,
-		DefaultChannel: cfg.Slack.DefaultChannel,
-		Channels:       cfg.Slack.Channels,
-	})
-
-	// --- Domain services ---
-	if k8sExecutor == nil {
-		logger.Error("kubernetes executor is required but unavailable; set kubernetes.inCluster=false and provide a kubeconfig for local dev")
-		os.Exit(1)
+	var notifier outbound.Notifier
+	if cfg.Slack.Enabled && cfg.Slack.BotToken != "" {
+		notifier = slacknotifier.NewNotifier(slacknotifier.Config{
+			BotToken:       cfg.Slack.BotToken,
+			DefaultChannel: cfg.Slack.DefaultChannel,
+			Channels:       cfg.Slack.Channels,
+		})
+	} else {
+		logger.Warn("slack not configured, using noop notifier (local dev mode)")
+		notifier = notification.NewNoopNotifier(logger)
 	}
 
+	// --- Domain services ---
 	analyzer := service.NewAnalyzer(llmClient, k8sExecutor)
 	planner := service.NewActionPlanner(k8sExecutor)
 	policyEval := service.NewPolicyEvaluator(policyRepo)
@@ -126,6 +137,9 @@ func main() {
 
 	// --- Webhook ---
 	reg := parser.NewRegistry()
+	reg.Register(parser.NewGrafanaParser())
+	reg.Register(parser.NewAlertManagerParser())
+	reg.Register(parser.NewGenericParser())
 
 	sourceConfigs := make(map[string]webhook.WebhookSourceConfig)
 	for name, src := range cfg.Webhook.Sources {

@@ -1,6 +1,6 @@
 # Binaries
 bin/
-opsai
+/opsai
 *.exe
 *.exe~
 *.dll

@@ -1,0 +1,145 @@
+server:
+  port: 8080
+  readTimeout: 30s
+  writeTimeout: 30s
+  shutdownTimeout: 15s
+  metricsPort: 9090
+
+llm:
+  provider: ollama
+  maxAnalysisRetries: 3
+  confidenceThreshold: 0.6
+  ollama:
+    baseURL: "http://localhost:11434"
+    model: "llama3:latest"
+    timeout: 120s
+    maxRetries: 3
+    temperature: 0.1
+    contextSize: 8192
+    systemPrompt: |
+      You are an expert Kubernetes operations assistant. Analyze alerts and infrastructure issues,
+      then provide clear diagnoses and actionable remediation steps. Be concise and precise.
+  claude:
+    apiKey: "${CLAUDE_API_KEY}"
+    model: "claude-3-5-sonnet-20241022"
+    maxTokens: 4096
+    timeout: 60s
+  openai:
+    apiKey: "${OPENAI_API_KEY}"
+    model: "gpt-4o"
+    maxTokens: 4096
+    timeout: 60s
+
+kubernetes:
+  inCluster: false
+  kubeconfig: "~/.kube/config"
+  execTimeout: 30s
+  logTailLines: 100
+  blockedNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+  whitelist:
+    readOnly:
+      - get
+      - describe
+      - logs
+      - top
+      - events
+    exec:
+      - cat
+      - ls
+      - df
+      - free
+      - top
+      - ps
+      - netstat
+      - ss
+      - curl
+      - nslookup
+      - dig
+      - ping
+    remediation:
+      - "rollout restart"
+      - scale
+      - "delete pod"
+
+webhook:
+  sources:
+    grafana:
+      enabled: true
+      path: /webhooks/grafana
+      secret: ""
+      authType: bearer
+    alertmanager:
+      enabled: true
+      path: /webhooks/alertmanager
+      secret: ""
+      authType: bearer
+    generic:
+      enabled: true
+      path: /webhooks/generic
+      secret: ""
+      authType: bearer
+  deduplication:
+    enabled: true
+    window: 5m
+  rateLimit:
+    enabled: true
+    requestsPerMinute: 60
+
+slack:
+  enabled: false
+  botToken: ""
+  appToken: ""
+  signingSecret: ""
+  defaultChannel: "#ops-alerts"
+  channels:
+    dev: "#ops-alerts-dev"
+    staging: "#ops-alerts-staging"
+    prod: "#ops-alerts-prod"
+  interaction:
+    approvalTimeout: 30m
+    autoExecDelay: 5s
+    threadHistoryLimit: 50
+
+policy:
+  environments:
+    dev:
+      mode: auto_fix
+      maxAutoRisk: medium
+      namespaces: []
+    staging:
+      mode: warn_auto
+      maxAutoRisk: medium
+      namespaces: []
+    prod:
+      mode: approval_required
+      maxAutoRisk: low
+      approvers:
+        - "@oncall-team"
+      namespaces: []
+  customRules: []
+
+database:
+  driver: sqlite
+  sqlite:
+    path: "./data/opsai-bot.db"
+    maxOpenConns: 1
+    pragmaJournalMode: wal
+    pragmaBusyTimeout: 5000
+  postgres:
+    host: "${POSTGRES_HOST}"
+    port: 5432
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+    database: "${POSTGRES_DB}"
+    sslMode: require
+    maxOpenConns: 25
+    maxIdleConns: 5
+    connMaxLifetime: 5m
+
+logging:
+  level: debug
+  format: text
+  output: stdout
