@@ -95,7 +95,6 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, req inbound.MessageReq
 
 	// Persist assistant reply.
 	thread = thread.AddMessage(model.MessageRoleAssistant, resp.Reply, "system")
-	thread.UpdatedAt = time.Now().UTC()
 	if _, err = o.repos.Conversations.Update(ctx, thread); err != nil {
 		return inbound.MessageResponse{}, fmt.Errorf("update conversation thread: %w", err)
 	}
@@ -347,9 +346,7 @@ func (o *Orchestrator) processApproval(ctx context.Context, actionID string, app
 
 // executeAction runs all commands for an action and returns the updated action.
 func (o *Orchestrator) executeAction(ctx context.Context, action model.Action) (model.Action, error) {
-	now := time.Now().UTC()
-	action.Status = model.ActionStatusExecuting
-	action.ExecutedAt = &now
+	action = action.WithExecutedAt(time.Now().UTC())
 
 	var outputs []string
 	var execErr error

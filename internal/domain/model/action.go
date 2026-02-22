@@ -107,6 +107,13 @@ func (a Action) Complete(output string) Action {
 	return a
 }
 
+func (a Action) WithExecutedAt(t time.Time) Action {
+	a.Status = ActionStatusExecuting
+	a.ExecutedAt = &t
+	a.UpdatedAt = time.Now().UTC()
+	return a
+}
+
 func (a Action) Fail(errMsg string) Action {
 	a.Status = ActionStatusFailed
 	a.ErrorMessage = errMsg
