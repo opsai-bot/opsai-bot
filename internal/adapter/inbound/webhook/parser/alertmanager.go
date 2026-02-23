@@ -91,14 +91,17 @@ func (a *AlertManagerParser) ValidateSignature(r *http.Request, secret string) e
 	if err != nil {
 		return fmt.Errorf("reading request body for signature validation: %w", err)
 	}
+	// Restore body so downstream handlers can read it.
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	mac := hmac.New(sha256.New, []byte(secret))
-	// Body is already exhausted at this point; the handler should use HMACAuth middleware.
-	// Return an error indicating middleware should be used instead.
-	_ = providedSig
-	_ = mac
-	return fmt.Errorf("use HMACAuth middleware for AlertManager signature validation")
+	mac.Write(bodyBytes)
+	expectedSig := mac.Sum(nil)
+
+	if !hmac.Equal(expectedSig, providedSig) {
+		return fmt.Errorf("invalid HMAC signature")
+	}
+	return nil
 }
 
 // Parse extracts model.Alert instances from an AlertManager group payload.

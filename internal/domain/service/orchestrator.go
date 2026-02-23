@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type Orchestrator struct {
 	notifier   outbound.Notifier
 	k8s        outbound.K8sExecutor
 	repos      Repositories
+	logger     *slog.Logger
 }
 
 // NewOrchestrator creates an Orchestrator with all required dependencies.
@@ -39,6 +41,7 @@ func NewOrchestrator(
 	notifier outbound.Notifier,
 	k8s outbound.K8sExecutor,
 	repos Repositories,
+	logger *slog.Logger,
 ) *Orchestrator {
 	return &Orchestrator{
 		analyzer:   analyzer,
@@ -47,6 +50,18 @@ func NewOrchestrator(
 		notifier:   notifier,
 		k8s:        k8s,
 		repos:      repos,
+		logger:     logger,
+	}
+}
+
+// logAudit creates an audit log, logging on failure instead of silently discarding.
+func (o *Orchestrator) logAudit(ctx context.Context, log model.AuditLog) {
+	if err := o.repos.Audits.Create(ctx, log); err != nil {
+		o.logger.Error("failed to write audit log",
+			"error", err,
+			"event_type", string(log.EventType),
+			"alert_id", log.AlertID,
+		)
 	}
 }
 
@@ -107,7 +122,7 @@ func (o *Orchestrator) HandleMessage(ctx context.Context, req inbound.MessageReq
 		"",
 		fmt.Sprintf("user %s sent message in thread %s", req.UserName, req.ThreadID),
 	)
-	_ = o.repos.Audits.Create(ctx, auditLog)
+	o.logAudit(ctx, auditLog)
 
 	suggested := make([]inbound.SuggestedActionInfo, 0, len(resp.SuggestedActions))
 	for _, sa := range resp.SuggestedActions {
@@ -158,7 +173,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 	}
 
 	// Audit: received.
-	_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+	o.logAudit(ctx, model.NewAuditLog(
 		model.AuditAlertReceived,
 		alert.ID,
 		"system",
@@ -173,7 +188,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 	}
 
 	// Audit: analysis started.
-	_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+	o.logAudit(ctx, model.NewAuditLog(
 		model.AuditAnalysisStarted,
 		alert.ID,
 		"system",
@@ -195,7 +210,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 	}
 
 	// Audit: analysis completed.
-	_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+	o.logAudit(ctx, model.NewAuditLog(
 		model.AuditAnalysisCompleted,
 		alert.ID,
 		"system",
@@ -219,7 +234,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 			Risk:        string(a.Risk),
 		})
 	}
-	_ = o.notifier.NotifyAnalysis(ctx, outbound.AnalysisNotification{
+	if notifyErr := o.notifier.NotifyAnalysis(ctx, outbound.AnalysisNotification{
 		AlertID:     alert.ID,
 		ThreadID:    threadID,
 		RootCause:   analysis.RootCause,
@@ -227,11 +242,15 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 		Severity:    string(analysis.Severity),
 		Actions:     actionNotifs,
 		Explanation: analysis.Explanation,
-	})
+	}); notifyErr != nil {
+		o.logger.Error("failed to notify analysis", "error", notifyErr, "alert_id", alert.ID)
+	}
 
 	// 6. For each action: evaluate policy and execute or request approval.
 	alert = alert.WithStatus(model.AlertStatusActing)
-	_, _ = o.repos.Alerts.Update(ctx, alert)
+	if _, updateErr := o.repos.Alerts.Update(ctx, alert); updateErr != nil {
+		o.logger.Error("failed to update alert status", "error", updateErr, "alert_id", alert.ID)
+	}
 
 	allResolved := true
 	for _, action := range actions {
@@ -242,7 +261,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 		}
 
 		// Audit: policy evaluated.
-		_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+		o.logAudit(ctx, model.NewAuditLog(
 			model.AuditPolicyEvaluated,
 			alert.ID,
 			"system",
@@ -252,7 +271,11 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 
 		if !decision.Allowed {
 			action = action.WithStatus(model.ActionStatusRejected)
-			action, _ = o.repos.Actions.Create(ctx, action)
+			action, createErr := o.repos.Actions.Create(ctx, action)
+			if createErr != nil {
+				o.logger.Error("failed to create action", "error", createErr, "alert_id", alert.ID)
+			}
+			_ = action
 			continue
 		}
 
@@ -264,7 +287,7 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 				continue
 			}
 
-			_ = o.notifier.RequestApproval(ctx, outbound.ApprovalNotification{
+			if notifyErr := o.notifier.RequestApproval(ctx, outbound.ApprovalNotification{
 				AlertID:     alert.ID,
 				ThreadID:    threadID,
 				ActionID:    action.ID,
@@ -273,14 +296,17 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 				Risk:        string(action.Risk),
 				Environment: alert.Environment,
 				RequestedBy: "system",
-			})
+			}); notifyErr != nil {
+				o.logger.Error("failed to request approval", "error", notifyErr, "alert_id", alert.ID, "action_id", action.ID)
+			}
 			allResolved = false
 			continue
 		}
 
 		// Auto-execute.
-		action, err = o.repos.Actions.Create(ctx, action)
-		if err != nil {
+		action, createErr := o.repos.Actions.Create(ctx, action)
+		if createErr != nil {
+			o.logger.Error("failed to create action", "error", createErr, "alert_id", alert.ID)
 			allResolved = false
 			continue
 		}
@@ -288,14 +314,18 @@ func (o *Orchestrator) HandleAlert(ctx context.Context, alert model.Alert) error
 		if execErr != nil {
 			allResolved = false
 		}
-		_ = o.repos.Actions.UpdateStatus(ctx, executedAction.ID, executedAction.Status, executedAction.Output)
+		if updateErr := o.repos.Actions.UpdateStatus(ctx, executedAction.ID, executedAction.Status, executedAction.Output); updateErr != nil {
+			o.logger.Error("failed to update action status", "error", updateErr, "action_id", executedAction.ID)
+		}
 	}
 
 	// 7. Update final alert status.
 	if allResolved {
 		alert = alert.WithStatus(model.AlertStatusResolved)
 	}
-	_, _ = o.repos.Alerts.Update(ctx, alert)
+	if _, updateErr := o.repos.Alerts.Update(ctx, alert); updateErr != nil {
+		o.logger.Error("failed to update alert status", "error", updateErr, "alert_id", alert.ID)
+	}
 
 	return nil
 }
@@ -313,7 +343,7 @@ func (o *Orchestrator) processApproval(ctx context.Context, actionID string, app
 			return fmt.Errorf("update action status: %w", err)
 		}
 
-		_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+		o.logAudit(ctx, model.NewAuditLog(
 			model.AuditActionApproved,
 			action.AlertID,
 			approvedBy,
@@ -333,7 +363,7 @@ func (o *Orchestrator) processApproval(ctx context.Context, actionID string, app
 		return fmt.Errorf("update action status: %w", err)
 	}
 
-	_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+	o.logAudit(ctx, model.NewAuditLog(
 		model.AuditActionRejected,
 		action.AlertID,
 		approvedBy,
@@ -382,7 +412,7 @@ func (o *Orchestrator) executeAction(ctx context.Context, action model.Action) (
 		action = action.Complete(output)
 	}
 
-	_ = o.repos.Audits.Create(ctx, model.NewAuditLog(
+	o.logAudit(ctx, model.NewAuditLog(
 		auditType,
 		action.AlertID,
 		"system",
@@ -395,13 +425,15 @@ func (o *Orchestrator) executeAction(ctx context.Context, action model.Action) (
 	if v, ok := action.Metadata["thread_id"]; ok {
 		threadID = v
 	}
-	_ = o.notifier.NotifyAction(ctx, threadID, outbound.ActionNotification{
+	if notifyErr := o.notifier.NotifyAction(ctx, threadID, outbound.ActionNotification{
 		Description: action.Description,
 		Command:     strings.Join(action.Commands, " && "),
 		Status:      string(action.Status),
 		Output:      output,
 		Risk:        string(action.Risk),
-	})
+	}); notifyErr != nil {
+		o.logger.Error("failed to notify action", "error", notifyErr, "action_id", action.ID)
+	}
 
 	return action, execErr
 }

@@ -3,11 +3,18 @@ package sqlite
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 
 	"github.com/jonny/opsai-bot/internal/adapter/outbound/persistence/sqlite/migration"
 )
+
+// validJournalModes defines accepted SQLite journal modes.
+var validJournalModes = map[string]bool{
+	"wal": true, "delete": true, "truncate": true,
+	"persist": true, "memory": true, "off": true,
+}
 
 // Config holds SQLite connection configuration.
 type Config struct {
@@ -24,6 +31,9 @@ type Store struct {
 
 // NewStore opens the SQLite database at cfg.Path, applies pragmas, and runs migrations.
 func NewStore(cfg Config) (*Store, error) {
+	if cfg.PragmaJournalMode != "" && !validJournalModes[strings.ToLower(cfg.PragmaJournalMode)] {
+		return nil, fmt.Errorf("invalid pragma journal mode: %q", cfg.PragmaJournalMode)
+	}
 	dsn := fmt.Sprintf(
 		"%s?_journal_mode=%s&_busy_timeout=%d",
 		cfg.Path,

@@ -107,6 +107,12 @@ func (r *AlertRepo) Update(ctx context.Context, alert model.Alert) (model.Alert,
 	return alert, nil
 }
 
+// allowedAlertOrderColumns defines valid columns for ORDER BY to prevent SQL injection.
+var allowedAlertOrderColumns = map[string]bool{
+	"created_at": true, "updated_at": true, "severity": true,
+	"status": true, "environment": true, "source": true, "title": true,
+}
+
 // List returns a paginated, filtered list of alerts.
 func (r *AlertRepo) List(ctx context.Context, filter outbound.AlertFilter, page outbound.PageRequest) (outbound.PageResult[model.Alert], error) {
 	where, args := buildAlertWhere(filter)
@@ -121,6 +127,9 @@ func (r *AlertRepo) List(ctx context.Context, filter outbound.AlertFilter, page 
 	// Fetch page
 	orderCol := "created_at"
 	if page.OrderBy != "" {
+		if !allowedAlertOrderColumns[page.OrderBy] {
+			return outbound.PageResult[model.Alert]{}, fmt.Errorf("invalid order column: %q", page.OrderBy)
+		}
 		orderCol = page.OrderBy
 	}
 	dir := "ASC"

@@ -121,6 +121,24 @@ func (a Action) Fail(errMsg string) Action {
 	return a
 }
 
+func (a Action) WithEnvironment(env string) Action {
+	a.Environment = env
+	a.UpdatedAt = time.Now().UTC()
+	return a
+}
+
+func (a Action) WithNamespace(ns string) Action {
+	a.Namespace = ns
+	a.UpdatedAt = time.Now().UTC()
+	return a
+}
+
+func (a Action) WithReversible(reversible bool) Action {
+	a.Reversible = reversible
+	a.UpdatedAt = time.Now().UTC()
+	return a
+}
+
 func (a Action) NeedsApproval() bool {
 	return a.Status == ActionStatusPending
 }

@@ -158,10 +158,36 @@ func TestGenericParser_SeverityMapping(t *testing.T) {
 	}
 }
 
-func TestGenericParser_ValidateSignature_NoOp(t *testing.T) {
+func TestGenericParser_ValidateSignature_NoSecret(t *testing.T) {
 	p := parser.NewGenericParser()
 	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
-	if err := p.ValidateSignature(req, "any-secret"); err != nil {
-		t.Errorf("expected no error, got %v", err)
+	if err := p.ValidateSignature(req, ""); err != nil {
+		t.Errorf("expected no error when secret is empty, got %v", err)
+	}
+}
+
+func TestGenericParser_ValidateSignature_ValidBearer(t *testing.T) {
+	p := parser.NewGenericParser()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	req.Header.Set("Authorization", "Bearer my-secret-token")
+	if err := p.ValidateSignature(req, "my-secret-token"); err != nil {
+		t.Errorf("expected no error for valid bearer token, got %v", err)
+	}
+}
+
+func TestGenericParser_ValidateSignature_InvalidBearer(t *testing.T) {
+	p := parser.NewGenericParser()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	if err := p.ValidateSignature(req, "my-secret-token"); err == nil {
+		t.Error("expected error for invalid bearer token")
+	}
+}
+
+func TestGenericParser_ValidateSignature_MissingHeader(t *testing.T) {
+	p := parser.NewGenericParser()
+	req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	if err := p.ValidateSignature(req, "any-secret"); err == nil {
+		t.Error("expected error when Authorization header is missing")
 	}
 }

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/jonny/opsai-bot/internal/domain/model"
@@ -43,10 +42,10 @@ func (p *ActionPlanner) Plan(
 		actionType := p.inferActionType(validCmds)
 		riskLevel := p.toRiskLevel(risk)
 
-		action := model.NewAction(analysisID, alertID, actionType, suggestion.Description, validCmds, riskLevel)
-		action.Environment = env
-		action.Namespace = ns
-		action.Reversible = suggestion.Reversible
+		action := model.NewAction(analysisID, alertID, actionType, suggestion.Description, validCmds, riskLevel).
+			WithEnvironment(env).
+			WithNamespace(ns).
+			WithReversible(suggestion.Reversible)
 
 		actions = append(actions, action)
 	}
@@ -128,9 +127,4 @@ func (p *ActionPlanner) toRiskLevel(risk string) model.RiskLevel {
 	default:
 		return model.RiskMedium
 	}
-}
-
-// formatCommands joins a command slice into a human-readable string for error messages.
-func formatCommands(cmds []string) string {
-	return fmt.Sprintf("[%s]", strings.Join(cmds, ", "))
 }

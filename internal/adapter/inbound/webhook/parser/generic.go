@@ -41,8 +41,23 @@ func (g *GenericParser) CanParse(r *http.Request) bool {
 	return strings.Contains(ct, "application/json")
 }
 
-// ValidateSignature is a no-op for the generic parser (no signature scheme defined).
+// ValidateSignature validates a Bearer token in the Authorization header.
+// Returns nil when no secret is configured (authentication disabled).
 func (g *GenericParser) ValidateSignature(r *http.Request, secret string) error {
+	if secret == "" {
+		return nil
+	}
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return fmt.Errorf("missing Authorization header")
+	}
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return fmt.Errorf("invalid Authorization header format")
+	}
+	if strings.TrimSpace(parts[1]) != secret {
+		return fmt.Errorf("invalid bearer token")
+	}
 	return nil
 }
 

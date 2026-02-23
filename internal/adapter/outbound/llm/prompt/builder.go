@@ -9,6 +9,20 @@ import (
 //go:embed templates/*.tmpl
 var templateFS embed.FS
 
+// maxAlertSummaryLen is the maximum allowed length for alert summary in prompts.
+const maxAlertSummaryLen = 4000
+
+// maxK8sContextLen is the maximum allowed length for K8s context in prompts.
+const maxK8sContextLen = 8000
+
+// sanitizePromptInput removes known prompt injection patterns and truncates to maxLen.
+func sanitizePromptInput(s string, maxLen int) string {
+	if len(s) > maxLen {
+		s = s[:maxLen] + "\n... [truncated]"
+	}
+	return s
+}
+
 // Builder constructs prompts for LLM diagnosis and conversation.
 type Builder struct {
 	templates *template.Template
@@ -54,6 +68,9 @@ type MessageInput struct {
 
 // BuildDiagnosePrompt renders the diagnose template with the given input.
 func (b *Builder) BuildDiagnosePrompt(input DiagnoseInput) (string, error) {
+	input.AlertSummary = sanitizePromptInput(input.AlertSummary, maxAlertSummaryLen)
+	input.K8sContext = sanitizePromptInput(input.K8sContext, maxK8sContextLen)
+
 	var buf bytes.Buffer
 	if err := b.templates.ExecuteTemplate(&buf, "diagnose.tmpl", input); err != nil {
 		return "", err

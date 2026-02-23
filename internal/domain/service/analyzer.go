@@ -68,7 +68,7 @@ func (a *Analyzer) AnalyzeAlert(ctx context.Context, alert model.Alert) (model.A
 		WithDiagnosis(result.RootCause, model.Severity(result.Severity), result.Confidence, result.Explanation).
 		WithTokenUsage(0, 0, latencyMs)
 
-	analysis.K8sContext = k8sCtx
+	analysis = analysis.WithK8sContext(k8sCtx)
 
 	return analysis, result.SuggestedActions, nil
 }

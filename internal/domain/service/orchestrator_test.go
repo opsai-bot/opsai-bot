@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -199,7 +200,7 @@ func buildOrchestrator(
 		Audits:        &mockAuditRepo{},
 		Conversations: newMockConversationRepo(),
 	}
-	return service.NewOrchestrator(analyzer, planner, policyEval, notifier, k8sMock, repos)
+	return service.NewOrchestrator(analyzer, planner, policyEval, notifier, k8sMock, repos, slog.Default())
 }
 
 // --- tests ---

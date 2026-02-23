@@ -43,6 +43,11 @@ func (a Analysis) WithTokenUsage(prompt, response int, latencyMs int64) Analysis
 	return a
 }
 
+func (a Analysis) WithK8sContext(ctx string) Analysis {
+	a.K8sContext = ctx
+	return a
+}
+
 func (a Analysis) IsHighConfidence() bool {
 	return a.Confidence >= 0.7
 }

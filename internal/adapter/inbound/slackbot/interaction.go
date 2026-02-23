@@ -140,7 +140,12 @@ func (b *Bot) handleSlashCommand(ctx context.Context, evt socketmode.Event) {
 	case "help":
 		responseText = buildHelpText()
 	default:
-		responseText = fmt.Sprintf(":question: Unknown command `%s`. Try `/opsai help`.", cmd.Text)
+		sanitized := cmd.Text
+		if len(sanitized) > 100 {
+			sanitized = sanitized[:100]
+		}
+		sanitized = strings.ReplaceAll(sanitized, "`", "'")
+		responseText = fmt.Sprintf(":question: Unknown command `%s`. Try `/opsai help`.", sanitized)
 	}
 
 	b.socketMode.Ack(*evt.Request, map[string]string{

@@ -44,6 +44,12 @@ func (r *AuditRepo) Create(ctx context.Context, log model.AuditLog) error {
 	return nil
 }
 
+// allowedAuditOrderColumns defines valid columns for ORDER BY to prevent SQL injection.
+var allowedAuditOrderColumns = map[string]bool{
+	"created_at": true, "event_type": true, "actor": true,
+	"environment": true, "alert_id": true,
+}
+
 // List returns a paginated, filtered list of audit logs.
 func (r *AuditRepo) List(ctx context.Context, filter outbound.AuditFilter, page outbound.PageRequest) (outbound.PageResult[model.AuditLog], error) {
 	where, args := buildAuditWhere(filter)
@@ -55,6 +61,9 @@ func (r *AuditRepo) List(ctx context.Context, filter outbound.AuditFilter, page 
 
 	orderCol := "created_at"
 	if page.OrderBy != "" {
+		if !allowedAuditOrderColumns[page.OrderBy] {
+			return outbound.PageResult[model.AuditLog]{}, fmt.Errorf("invalid order column: %q", page.OrderBy)
+		}
 		orderCol = page.OrderBy
 	}
 	dir := "ASC"

@@ -55,6 +55,48 @@ func Validate(cfg *Config) error {
 		}
 	}
 
+	// Validate metricsPort.
+	if cfg.Server.MetricsPort <= 0 || cfg.Server.MetricsPort > 65535 {
+		errs = append(errs, "server.metricsPort must be between 1 and 65535")
+	}
+	if cfg.Server.MetricsPort == cfg.Server.Port {
+		errs = append(errs, "server.metricsPort must differ from server.port")
+	}
+
+	// Validate execTimeout.
+	if cfg.Kubernetes.ExecTimeout <= 0 {
+		errs = append(errs, "kubernetes.execTimeout must be positive")
+	}
+
+	// Validate rate limit.
+	if cfg.Webhook.RateLimit.Enabled && cfg.Webhook.RateLimit.RequestsPerMinute <= 0 {
+		errs = append(errs, "webhook.rateLimit.requestsPerMinute must be positive when enabled")
+	}
+
+	// Validate maxAutoRisk in policies.
+	validRisks := map[string]bool{"low": true, "medium": true, "high": true, "critical": true}
+	for name, env := range cfg.Policy.Environments {
+		if env.MaxAutoRisk != "" && !validRisks[env.MaxAutoRisk] {
+			errs = append(errs, fmt.Sprintf("policy.environments.%s.maxAutoRisk must be low, medium, high, or critical", name))
+		}
+	}
+
+	// Validate Ollama BaseURL for SSRF - block cloud metadata endpoints.
+	if cfg.LLM.Provider == "ollama" && cfg.LLM.Ollama.BaseURL != "" {
+		baseURL := strings.ToLower(cfg.LLM.Ollama.BaseURL)
+		blockedPrefixes := []string{
+			"http://169.254.169.254",
+			"http://metadata.google",
+			"http://100.100.100.200",
+		}
+		for _, prefix := range blockedPrefixes {
+			if strings.HasPrefix(baseURL, prefix) {
+				errs = append(errs, "llm.ollama.baseURL must not point to cloud metadata endpoints")
+				break
+			}
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation errors:\n  - %s", strings.Join(errs, "\n  - "))
 	}

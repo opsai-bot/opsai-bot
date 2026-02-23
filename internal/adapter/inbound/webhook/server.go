@@ -55,10 +55,11 @@ func (s *Server) SetupRoutes() http.Handler {
 	mux.Handle("/webhook", s.handler)
 
 	// Apply middleware stack (outermost = first to execute):
-	//   BodyReader -> Logging -> RateLimit
+	//   BodyReader -> SecurityHeaders -> Logging -> RateLimit
 	var h http.Handler = mux
 	h = middleware.NewRateLimiter(120)(h)
 	h = middleware.NewLoggingMiddleware(s.logger)(h)
+	h = middleware.SecurityHeaders(h)
 	h = middleware.BodyReader(h)
 
 	return h

@@ -14,6 +14,9 @@ import (
 	"github.com/jonny/opsai-bot/internal/domain/port/outbound"
 )
 
+// maxLLMResponseSize limits the maximum response body from the Ollama API (10 MB).
+const maxLLMResponseSize = 10 << 20
+
 // Config holds configuration for the Ollama client.
 type Config struct {
 	BaseURL      string
@@ -256,7 +259,7 @@ func (c *Client) postChat(ctx context.Context, body []byte) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxLLMResponseSize))
 	if err != nil {
 		return "", fmt.Errorf("reading ollama response: %w", err)
 	}

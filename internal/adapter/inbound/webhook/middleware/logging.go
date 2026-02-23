@@ -38,7 +38,7 @@ func NewLoggingMiddleware(logger *log.Logger) func(http.Handler) http.Handler {
 				r.URL.Path,
 				wrapped.statusCode,
 				elapsed.Round(time.Millisecond),
-				remoteIP(r),
+				remoteIP(r, false),
 			)
 		})
 	}
